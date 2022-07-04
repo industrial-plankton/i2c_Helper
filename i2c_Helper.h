@@ -27,6 +27,7 @@ union sensor_mem_handler // declare the use of a union data type
 sensor_mem_handler i2c_read(const unsigned char reg, const unsigned char number_of_bytes_to_read, const unsigned char bus_address);
 int i2c_read(const unsigned char reg, const unsigned char bus_address);
 uint8_t i2c_write_byte(const unsigned char reg, const unsigned char data, const unsigned char bus_address);
-uint8_t i2c_write_long(const unsigned char reg, const unsigned long data, const unsigned char bus_address);
+uint8_t i2c_write_int(const unsigned char reg, const uint16_t data, const unsigned char bus_address);
+uint8_t i2c_write_long(const unsigned char reg, const uint32_t data, const unsigned char bus_address);
 
 #endif
