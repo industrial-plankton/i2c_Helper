@@ -32,7 +32,7 @@ uint8_t i2c_write_long(const unsigned char reg, const uint32_t data, const unsig
 
 namespace i2c
 {
-    enum Status
+    enum class Status
     {
         success,
         BufferOverflow, // 1 .. length to long for buffer
@@ -42,19 +42,134 @@ namespace i2c
         timeout,
     };
 
-    enum Endianness
+    enum class Endianness
     {
         Big,
         Little
     };
 
+    namespace i2c_internal
+    {
+        constexpr Endianness GetEndianess()
+        {
+#ifdef __BYTE_ORDER__
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+            return Endianness::Little;
+#else
+            return Big;
+#endif
+#else
+#ifdef __AVR__
+            return Endianness::Little;
+#else
+            uint16_t TestValue = 1;
+            return static_cast<Endianness>(reinterpret_cast<uint8_t *>(&TestValue)[0] == TestValue);
+#endif
+#endif
+        }
+
+        template <typename T>
+        union DataConverter
+        {
+            T value;
+            uint8_t bytes[sizeof(T)];
+        };
+
+        template <typename T>
+        Status write_internal(const uint8_t reg, const T *data, const size_t numElements, const uint8_t bus_address, const Endianness device_endianess)
+        {
+            static_assert(sizeof(T) > 0, "Data type cannot have zero size for I2C transfer.");
+
+            DataConverter<T> converter;
+            converter.value = *data;
+
+            Wire.beginTransmission(bus_address);
+            Wire.write(reg);
+            for (size_t j = 0; j < numElements; j++)
+            {
+                if (device_endianess == GetEndianess())
+                {
+                    for (size_t i = 0; i < sizeof(T); i++)
+                    {
+                        Wire.write(converter.bytes[i]);
+                    }
+                }
+                else
+                {
+                    for (int i = sizeof(T) - 1; i >= 0; i--)
+                    {
+                        Wire.write(converter.bytes[i]);
+                    }
+                }
+            }
+            return (i2c::Status)Wire.endTransmission();
+        }
+
+        template <typename T>
+        Status read_internal(const uint8_t reg, T *data, const size_t numElements, const uint8_t bus_address, const Endianness device_endianess)
+        {
+            static_assert(sizeof(T) > 0, "Data type cannot have zero size for I2C transfer.");
+            Wire.beginTransmission(bus_address);
+            Wire.write(reg);
+            auto i2cError = Wire.endTransmission();
+            if (i2cError != 0)
+            {
+                return (i2c::Status)i2cError;
+            }
+
+            Wire.requestFrom(bus_address, sizeof(T) * numElements);
+            if (Wire.available() != sizeof(T) * numElements)
+            {
+                return Status::timeout;
+            }
+
+            DataConverter<T> converter;
+            for (size_t j = 0; j < numElements; j++)
+            {
+                if (device_endianess == GetEndianess())
+                {
+                    for (size_t i = 0; i < sizeof(T); i++)
+                    {
+                        converter.bytes[i] = Wire.read();
+                    }
+                }
+                else
+                {
+                    for (int i = sizeof(T) - 1; i >= 0; i--)
+                    {
+                        converter.bytes[i] = Wire.read();
+                    }
+                }
+                data[j] = converter.value;
+            }
+
+            return Status::success;
+        }
+    }
+
     template <typename T>
-    Status read(const uint8_t reg, T &data, const uint8_t bus_address, const Endianness device_endianess);
+    Status read(const uint8_t reg, T &data, const uint8_t bus_address, const Endianness device_endianess)
+    {
+        return i2c_internal::read_internal(reg, &data, 1, bus_address, device_endianess);
+    }
+
     template <typename T, size_t N>
-    Status read(const uint8_t reg, T (&data)[N], const uint8_t bus_address, const Endianness device_endianess);
+    Status read(const uint8_t reg, T (&data)[N], const uint8_t bus_address, const Endianness device_endianess)
+    {
+        static_assert(N > 0, "Array size cannot be zero for I2C transfer.");
+        return i2c_internal::read_internal(reg, data, N, bus_address, device_endianess);
+    }
+
     template <typename T>
-    Status write(const uint8_t reg, const T data, const uint8_t bus_address, const Endianness device_endianess);
+    Status write(const uint8_t reg, const T data, const uint8_t bus_address, const Endianness device_endianess)
+    {
+        return i2c_internal::write_internal(reg, &data, 1, bus_address, device_endianess);
+    }
     template <typename T, size_t N>
-    Status write(const uint8_t reg, const T (&data)[N], const uint8_t bus_address, const Endianness device_endianess);
+    Status write(const uint8_t reg, const T (&data)[N], const uint8_t bus_address, const Endianness device_endianess)
+    {
+        static_assert(N > 0, "Array size cannot be zero for I2C transfer.");
+        return i2c_internal::write_internal(reg, &data, N, bus_address, device_endianess);
+    }
 }
 #endif
