@@ -23,8 +23,7 @@ sensor_mem_handler i2c_read(const unsigned char reg, const unsigned char number_
     for (int i = number_of_bytes_to_read; i > 0; i--)
     {
         temp.i2c_data[i - 1] = Wire.read();
-    }                                  // with this code we read multiple bytes in reverse
-    i2cError = Wire.endTransmission(); // end the I2C data transmission
+    } // with this code we read multiple bytes in reverse
     return temp;
 }
 
@@ -36,10 +35,7 @@ int i2c_read(const unsigned char reg, const unsigned char bus_address)
     i2cError = Wire.endTransmission();   // end the I2C data transmission
 
     Wire.requestFrom(bus_address, (uint8_t)1); // call the device and request to read X bytes
-    const int value = Wire.read();
-    // with this code we read multiple bytes in reverse
-    Wire.endTransmission(); // end the I2C data transmission
-    return value;
+    return Wire.read();
 }
 //*************************************************************************************************************************
 //*************************************************************************************************************************
@@ -89,4 +85,98 @@ uint8_t i2c_write_long(const unsigned char reg, const uint32_t data, const unsig
     }
     i2cError = Wire.endTransmission(); // end the I2C data transmission
     return i2cError;
+}
+
+enum Endianness
+{
+    Big,
+    Little
+};
+
+constexpr Endianness GetEndianess()
+{
+#ifdef __BYTE_ORDER__
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return Little;
+#else
+    return Big;
+#endif
+#else
+#ifdef __AVR__
+    return Little;
+#else
+    uint16_t TestValue = 1;
+    return static_cast<Endianness>(reinterpret_cast<uint8_t *>(&TestValue)[0] == TestValue);
+#endif
+#endif
+}
+
+template <typename T>
+union DataConverter
+{
+    T value;
+    uint8_t bytes[sizeof(T)];
+};
+
+template <typename T>
+i2cStatus i2c_write(const uint8_t reg, const T data, const uint8_t bus_address, const Endianness device_endianess)
+{
+    static_assert(sizeof(T) > 0, "Data type cannot have zero size for I2C transfer.");
+    DataConverter<T> converter;
+    converter.value = data;
+
+    Wire.beginTransmission(bus_address);
+    Wire.write(reg);
+    if (device_endianess == GetEndianess())
+    {
+        for (size_t i = 0; i < sizeof(T); i++)
+        {
+            Wire.write(converter.bytes[i]);
+        }
+    }
+    else
+    {
+        for (int i = sizeof(T) - 1; i >= 0; i--)
+        {
+            Wire.write(converter.bytes[i]);
+        }
+    }
+    return Wire.endTransmission();
+}
+
+template <typename T>
+i2cStatus i2c_read(const uint8_t reg, T &data, const uint8_t bus_address, const Endianness device_endianess)
+{
+    static_assert(sizeof(T) > 0, "Data type cannot have zero size for I2C transfer.");
+    Wire.beginTransmission(bus_address);
+    Wire.write(reg);
+    auto i2cError = Wire.endTransmission();
+    if (i2cError != 0)
+    {
+        return i2cError;
+    }
+
+    Wire.requestFrom(bus_address, sizeof(T));
+    if (Wire.available() != sizeof(T))
+    {
+        return i2cStatus::timeout;
+    }
+
+    DataConverter<T> converter;
+    if (device_endianess == GetEndianess())
+    {
+        for (size_t i = 0; i < sizeof(T); i++)
+        {
+            converter.bytes[i] = Wire.read();
+        }
+    }
+    else
+    {
+        for (int i = sizeof(T) - 1; i >= 0; i--)
+        {
+            converter.bytes[i] = Wire.read();
+        }
+    }
+    data = converter.value;
+    return i2cStatus::success;
 }
