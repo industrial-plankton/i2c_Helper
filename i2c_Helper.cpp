@@ -131,18 +131,21 @@ namespace i2c
 
         Wire.beginTransmission(bus_address);
         Wire.write(reg);
-        if (device_endianess == GetEndianess())
+        for (size_t j = 0; j < N; j++)
         {
-            for (size_t i = 0; i < sizeof(T); i++)
+            if (device_endianess == GetEndianess())
             {
-                Wire.write(converter.bytes[i]);
+                for (size_t i = 0; i < sizeof(T); i++)
+                {
+                    Wire.write(converter.bytes[i]);
+                }
             }
-        }
-        else
-        {
-            for (int i = sizeof(T) - 1; i >= 0; i--)
+            else
             {
-                Wire.write(converter.bytes[i]);
+                for (int i = sizeof(T) - 1; i >= 0; i--)
+                {
+                    Wire.write(converter.bytes[i]);
+                }
             }
         }
         return Wire.endTransmission();
