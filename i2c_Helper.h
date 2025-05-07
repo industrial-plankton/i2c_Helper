@@ -30,4 +30,31 @@ uint8_t i2c_write_byte(const unsigned char reg, const unsigned char data, const 
 uint8_t i2c_write_int(const unsigned char reg, const uint16_t data, const unsigned char bus_address);
 uint8_t i2c_write_long(const unsigned char reg, const uint32_t data, const unsigned char bus_address);
 
+namespace i2c
+{
+    enum Status
+    {
+        success,
+        BufferOverflow, // 1 .. length to long for buffer
+        addressNACK,    // 2 .. address send, NACK received
+        dataNACK,       // 3 .. data send, NACK received
+        other,          // 4 .. other twi error (lost bus arbitration, bus error, ..)
+        timeout,
+    };
+
+    enum Endianness
+    {
+        Big,
+        Little
+    };
+
+    template <typename T>
+    Status read(const uint8_t reg, T &data, const uint8_t bus_address, const Endianness device_endianess);
+    template <typename T, size_t N>
+    Status read(const uint8_t reg, T (&data)[N], const uint8_t bus_address, const Endianness device_endianess);
+    template <typename T>
+    Status write(const uint8_t reg, const T data, const uint8_t bus_address, const Endianness device_endianess);
+    template <typename T, size_t N>
+    Status write(const uint8_t reg, const T (&data)[N], const uint8_t bus_address, const Endianness device_endianess);
+}
 #endif
