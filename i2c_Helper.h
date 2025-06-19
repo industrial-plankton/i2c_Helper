@@ -56,14 +56,14 @@ namespace i2c
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
             return Endianness::Little;
 #else
-            return Big;
+            return Endianness::Big;
 #endif
 #else
 #ifdef __AVR__
             return Endianness::Little;
 #else
             uint16_t TestValue = 1;
-            return static_cast<Endianness>(reinterpret_cast<uint8_t *>(&TestValue)[0] == TestValue);
+            return static_cast<Endianness>(reinterpret_cast<uint8_t *>(&TestValue)[0] == 1);
 #endif
 #endif
         }
@@ -76,17 +76,18 @@ namespace i2c
         };
 
         template <typename T>
-        Status write_internal(const uint8_t reg, const T *data, const size_t numElements, const uint8_t bus_address, const Endianness device_endianess)
+        Status write_internal(const uint8_t reg, const T *data_ptr, const size_t numElements, const uint8_t bus_address, const Endianness device_endianess)
         {
             static_assert(sizeof(T) > 0, "Data type cannot have zero size for I2C transfer.");
 
-            DataConverter<T> converter;
-            converter.value = *data;
-
             Wire.beginTransmission(bus_address);
             Wire.write(reg);
+
+            DataConverter<T> converter;
             for (size_t j = 0; j < numElements; j++)
             {
+                converter.value = data_ptr[j]; // Assign the current element's value
+
                 if (device_endianess == GetEndianess())
                 {
                     for (size_t i = 0; i < sizeof(T); i++)
@@ -106,7 +107,7 @@ namespace i2c
         }
 
         template <typename T>
-        Status read_internal(const uint8_t reg, T *data, const size_t numElements, const uint8_t bus_address, const Endianness device_endianess)
+        Status read_internal(const uint8_t reg, T *data_ptr, const size_t numElements, const uint8_t bus_address, const Endianness device_endianess)
         {
             static_assert(sizeof(T) > 0, "Data type cannot have zero size for I2C transfer.");
             Wire.beginTransmission(bus_address);
@@ -140,7 +141,7 @@ namespace i2c
                         converter.bytes[i] = Wire.read();
                     }
                 }
-                data[j] = converter.value;
+                data_ptr[j] = converter.value;
             }
 
             return Status::success;
@@ -160,16 +161,21 @@ namespace i2c
         return i2c_internal::read_internal(reg, data, N, bus_address, device_endianess);
     }
 
+    // Careful passing literals to this function, they usually default to int, and you might want to use a char
     template <typename T>
     Status write(const uint8_t reg, const T data, const uint8_t bus_address, const Endianness device_endianess)
     {
+        // Pass the address of the single data item
         return i2c_internal::write_internal(reg, &data, 1, bus_address, device_endianess);
     }
+
     template <typename T, size_t N>
     Status write(const uint8_t reg, const T (&data)[N], const uint8_t bus_address, const Endianness device_endianess)
     {
         static_assert(N > 0, "Array size cannot be zero for I2C transfer.");
-        return i2c_internal::write_internal(reg, &data, N, bus_address, device_endianess);
+        // Arrays decay to pointers to their first element when passed as arguments
+        return i2c_internal::write_internal(reg, data, N, bus_address, device_endianess);
     }
 }
+
 #endif
