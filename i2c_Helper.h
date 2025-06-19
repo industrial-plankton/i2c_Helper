@@ -148,6 +148,7 @@ namespace i2c
         }
     }
 
+    // Careful passing literals to this function, they usually default to int, and you might want to use a char
     template <typename T>
     Status read(const uint8_t reg, T &data, const uint8_t bus_address, const Endianness device_endianess)
     {
